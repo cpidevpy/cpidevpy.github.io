@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Proxy - Загрузка...</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        body {
+            background: #121826;
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: #1f2937;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #374151;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .url-display {
+            background: #374151;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            flex-grow: 1;
+            margin: 0 20px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .control-btn {
+            background: #4b5563;
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        
+        .control-btn:hover {
+            background: #6b7280;
+        }
+        
+        .main-content {
+            display: flex;
+            height: calc(100vh - 80px);
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #1f2937;
+            border-right: 1px solid #374151;
+            padding: 20px;
+            overflow-y: auto;
+            display: none; /* По умолчанию скрыта на мобильных */
+        }
+        
+        .proxy-frame {
+            flex-grow: 1;
+            border: none;
+            background: white;
+        }
+        
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #121826;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #374151;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .proxy-selector {
+            background: #374151;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .proxy-selector select {
+            width: 100%;
+            padding: 10px;
+            background: #4b5563;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        
+        .stats {
+            background: #374151;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        @media (max-width: 1024px) {
+            .sidebar {
+                display: none;
+            }
+            
+            .url-display {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Шапка -->
+    <div class="header">
+        <div class="header-controls">
+            <button class="control-btn" onclick="goBack()" title="Назад">
+                ←
+            </button>
+            <button class="control-btn" onclick="reload()" title="Перезагрузить">
+                ↻
+            </button>
+            <button class="control-btn" onclick="goForward()" title="Вперед">
+                →
+            </button>
+        </div>
+        
+        <div class="url-display" id="currentUrl">
+            Загрузка...
+        </div>
+        
+        <div class="header-controls">
+            <button class="control-btn" onclick="openSettings()" title="Настройки">
+                ⚙️
+            </button>
+            <button class="control-btn" onclick="goHome()" title="Домой">
+                🏠
+            </button>
+        </div>
+    </div>
+    
+    <!-- Основной контент -->
+    <div class="main-content">
+        <!-- Боковая панель -->
+        <div class="sidebar" id="sidebar">
+            <div class="proxy-selector">
+                <strong>Выберите прокси:</strong>
+                <select id="proxySelect">
+                    <option value="cors-anywhere">CORS Anywhere (стабильный)</option>
+                    <option value="allorigins">AllOrigins (быстрый)</option>
+                    <option value="corsproxy">CORS Proxy.io</option>
+                    <option value="thingproxy">ThingProxy</option>
+                </select>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-item">
+                    <span>Статус:</span>
+                    <span id="status" style="color: #2ecc71;">● Онлайн</span>
+                </div>
+                <div class="stat-item">
+                    <span>Задержка:</span>
+                    <span id="latency">-</span>
+                </div>
+                <div class="stat-item">
+                    <span>Размер:</span>
+                    <span id="size">-</span>
+                </div>
+                <div class="stat-item">
+                    <span>Время:</span>
+                    <span id="loadTime">-</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Iframe для сайта -->
+        <iframe class="proxy-frame" id="proxyFrame" sandbox="allow-same-origin allow-forms allow-scripts"></iframe>
+    </div>
+    
+    <!-- Загрузка -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // Конфигурация
+        const PROXY_SERVERS = {
+            'cors-anywhere': 'https://cors-anywhere.herokuapp.com/',
+            'allorigins': 'https://api.allorigins.win/raw?url=',
+            'corsproxy': 'https://corsproxy.io/?',
+            'thingproxy': 'https://thingproxy.freeboard.io/fetch/'
+        };
+        
+        // Состояние
+        let currentProxy = 'cors-anywhere';
+        let currentUrl = '';
+        let history = [];
+        let historyIndex = -1;
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            // Получаем URL из localStorage или параметров
+            const url = getUrlFromParams() || localStorage.getItem('proxy_url') || 'https://wikipedia.org';
+            
+            // Устанавливаем прокси из сохраненных настроек
+            const savedProxy = localStorage.getItem('proxy_server') || 'cors-anywhere';
+            document.getElementById('proxySelect').value = savedProxy;
+            currentProxy = savedProxy;
+            
+            // Загружаем сайт
+            loadSite(url);
+            
+            // Обновляем отображение URL
+            document.getElementById('currentUrl').textContent = url;
+            currentUrl = url;
+            
+            // Добавляем в историю
+            addToHistory(url);
+            
+            // Слушаем изменения в выборе прокси
+            document.getElementById('proxySelect').addEventListener('change', function(e) {
+                currentProxy = e.target.value;
+                localStorage.setItem('proxy_server', currentProxy);
+                reload();
+            });
+            
+            // Слушаем сообщения от iframe
+            window.addEventListener('message', handleIframeMessage);
+        });
+        
+        // Функция загрузки сайта
+        async function loadSite(url) {
+            const loading = document.getElementById('loading');
+            const frame = document.getElementById('proxyFrame');
+            const startTime = Date.now();
+            
+            // Показываем загрузку
+            loading.style.display = 'flex';
+            
+            try {
+                // Проверяем URL
+                if (!isValidUrl(url)) {
+                    throw new Error('Некорректный URL');
+                }
+                
+                // Получаем прокси URL
+                const proxyUrl = PROXY_SERVERS[currentProxy] + encodeURIComponent(url);
+                
+                // Делаем запрос
+                const response = await fetch(proxyUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                });
+                
+                // Проверяем ответ
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                // Получаем HTML
+                const html = await response.text();
+                const loadTime = Date.now() - startTime;
+                
+                // Обрабатываем HTML
+                const processedHtml = processHtml(html, url);
+                
+                // Вставляем в iframe
+                frame.srcdoc = processedHtml;
+                
+                // Обновляем статистику
+                updateStats({
+                    size: `${(html.length / 1024).toFixed(1)} KB`,
+                    time: `${loadTime}ms`,
+                    latency: `${loadTime}ms`,
+                    status: 'Успешно'
+                });
+                
+                // Обновляем URL
+                document.getElementById('currentUrl').textContent = url;
+                currentUrl = url;
+                
+            } catch (error) {
+                // Показываем ошибку
+                frame.srcdoc = createErrorPage(error.message, url);
+                
+                updateStats({
+                    status: 'Ошибка',
+                    error: error.message
+                });
+                
+                console.error('Ошибка загрузки:', error);
+            } finally {
+                // Скрываем загрузку
+                setTimeout(() => {
+                    loading.style.display = 'none';
+                }, 500);
+            }
+        }
+        
+        // Обработка HTML
+        function processHtml(html, baseUrl) {
+            // Создаем временный DOM
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Добавляем base tag
+            const baseTag = doc.createElement('base');
+            baseTag.href = baseUrl;
+            doc.head.prepend(baseTag);
+            
+            // Обрабатываем все ссылки
+            doc.querySelectorAll('a[href]').forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+                    const absoluteUrl = new URL(href, baseUrl).href;
+                    link.setAttribute('onclick', `parent.navigateTo('${absoluteUrl}'); return false;`);
+                    link.setAttribute('href', '#');
+                }
+            });
+            
+            // Обрабатываем формы
+            doc.querySelectorAll('form').forEach(form => {
+                const action = form.getAttribute('action') || baseUrl;
+                const absoluteAction = new URL(action, baseUrl).href;
+                
+                form.setAttribute('onsubmit', `
+                    event.preventDefault();
+                    const formData = new FormData(this);
+                    parent.submitForm('${absoluteAction}', formData, '${form.method}');
+                    return false;
+                `);
+            });
+            
+            // Возвращаем обработанный HTML
+            return doc.documentElement.outerHTML;
+        }
+        
+        // Создание страницы ошибки
+        function createErrorPage(message, url) {
+            return `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            padding: 40px;
+                            background: #f8f9fa;
+                            color: #333;
+                        }
+                        .error-container {
+                            max-width: 600px;
+                            margin: 0 auto;
+                            text-align: center;
+                        }
+                        .error-icon {
+                            font-size: 60px;
+                            margin-bottom: 20px;
+                            color: #e74c3c;
+                        }
+                        h1 {
+                            color: #c53030;
+                            margin-bottom: 20px;
+                        }
+                        .try-again {
+                            background: #667eea;
+                            color: white;
+                            border: none;
+                            padding: 12px 24px;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            margin-top: 20px;
+                            font-size: 16px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="error-container">
+                        <div class="error-icon">❌</div>
+                        <h1>Ошибка загрузки</h1>
+                        <p style="font-size: 18px; margin-bottom: 10px;">${message}</p>
+                        <p style="color: #666; margin-bottom: 20px;">URL: ${url}</p>
+                        
+                        <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; text-align: left; margin: 20px 0;">
+                            <strong>Возможные решения:</strong>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>Попробуйте другой прокси сервер</li>
+                                <li>Проверьте правильность URL</li>
+                                <li>Сайт может блокировать CORS запросы</li>
+                                <li>Попробуйте позже</li>
+                            </ul>
+                        </div>
+                        
+                        <button class="try-again" onclick="parent.reload()">Попробовать снова</button>
+                        <button class="try-again" onclick="parent.goHome()" style="background: #6c757d; margin-left: 10px;">На главную</button>
+                    </div>
+                </body>
+                </html>
+            `;
+        }
+        
+        // Вспомогательные функции
+        function isValidUrl(string) {
+            try {
+                new URL(string);
+                return true;
+            } catch (_) {
+                return false;
+            }
+        }
+        
+        function getUrlFromParams() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('url');
+        }
+        
+        function updateStats(stats) {
+            if (stats.size) document.getElementById('size').textContent = stats.size;
+            if (stats.time) document.getElementById('loadTime').textContent = stats.time;
+            if (stats.latency) document.getElementById('latency').textContent = stats.latency;
+            if (stats.status) document.getElementById('status').textContent = stats.status;
+        }
+        
+        function addToHistory(url) {
+            history.push(url);
+            historyIndex = history.length - 1;
+            
+            // Сохраняем историю
+            if (history.length > 50) history.shift();
+            localStorage.setItem('proxy_history', JSON.stringify(history));
+        }
+        
+        function handleIframeMessage(event) {
+            if (event.data.type === 'NAVIGATE') {
+                loadSite(event.data.url);
+                addToHistory(event.data.url);
+            }
+        }
+        
+        // Глобальные функции для iframe
+        window.navigateTo = function(url) {
+            loadSite(url);
+            addToHistory(url);
+        };
+        
+        window.submitForm = function(url, formData, method) {
+            // Здесь можно реализовать отправку форм
+            console.log('Form submit to:', url, method, formData);
+            alert('Отправка форм временно не поддерживается');
+        };
+        
+        // Управление
+        window.goBack = function() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                loadSite(history[historyIndex]);
+            }
+        };
+        
+        window.goForward = function() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                loadSite(history[historyIndex]);
+            }
+        };
+        
+        window.reload = function() {
+            loadSite(currentUrl);
+        };
+        
+        window.goHome = function() {
+            window.location.href = 'index.html';
+        };
+        
+        window.openSettings = function() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.style.display = sidebar.style.display === 'block' ? 'none' : 'block';
+        };
+    </script>
+</body>
+  </html>
